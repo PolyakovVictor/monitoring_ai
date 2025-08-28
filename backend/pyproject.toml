@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "backend"
+version = "0.1.0"
+description = ""
+authors = ["PolyakovVictor <polyakov.victor21@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.11"
+alembic = ">=1.16.4,<2.0.0"
+fastapi = ">=0.116.1,<0.117.0"
+uvicorn = ">=0.35.0,<0.36.0"
+sqlalchemy = ">=2.0.43,<3.0.0"
+asyncpg = ">=0.30.0,<0.31.0"
+pydantic = ">=2.11.7,<3.0.0"
+python-multipart = ">=0.0.20,<0.0.21"
+pandas = "^2.3.2"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

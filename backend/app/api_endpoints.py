@@ -1,0 +1,111 @@
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from typing import Optional
+from datetime import date
+
+from .db import get_session
+from .models import City, Station, Pollutant, Measurement
+
+router = APIRouter()
+
+# 1. Міста
+@router.get("/cities/")
+async def get_cities(session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(City))
+    cities = result.scalars().all()
+    return [{"id": c.id, "name": c.name} for c in cities]
+
+
+# 2. Станції у місті
+@router.get("/cities/{city_id}/stations/")
+async def get_stations(city_id: int, session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(Station).where(Station.city_id == city_id))
+    stations = result.scalars().all()
+    return [{"id": s.id, "name": s.name} for s in stations]
+
+
+# 3. Полютанти
+@router.get("/pollutants/")
+async def get_pollutants(session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(Pollutant))
+    pollutants = result.scalars().all()
+    return [{"id": p.id, "code": p.code, "description": p.description} for p in pollutants]
+
+
+# 4. Вимірювання з фільтрами (фіксований join)
+@router.get("/measurements/")
+async def get_measurements(
+    city_id: Optional[int] = None,
+    station_id: Optional[int] = None,
+    pollutant_id: Optional[int] = None,
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    session: AsyncSession = Depends(get_session),
+):
+    query = (
+        select(Measurement, Station, City, Pollutant)
+        .select_from(Measurement)
+        .join(Station, Measurement.station_id == Station.id)
+        .join(City, Station.city_id == City.id)
+        .join(Pollutant, Measurement.pollutant_id == Pollutant.id)
+    )
+
+    if city_id:
+        query = query.where(City.id == city_id)
+    if station_id:
+        query = query.where(Station.id == station_id)
+    if pollutant_id:
+        query = query.where(Pollutant.id == pollutant_id)
+    if date_from:
+        query = query.where(Measurement.date >= date_from)
+    if date_to:
+        query = query.where(Measurement.date <= date_to)
+
+    result = await session.execute(query)
+    rows = result.all()
+
+    return [
+        {
+            "city": city.name,
+            "station": station.name,
+            "pollutant": pollutant.code,
+            "date": m.date.isoformat(),
+            "value": m.value,
+        }
+        for m, station, city, pollutant in rows
+    ]
+
+
+# 5. Агреговані статистики (фіксований join)
+@router.get("/stats/")
+async def get_stats(
+    pollutant_id: int,
+    city_id: Optional[int] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    session: AsyncSession = Depends(get_session),
+):
+    query = (
+        select(
+            func.avg(Measurement.value).label("avg"),
+            func.min(Measurement.value).label("min"),
+            func.max(Measurement.value).label("max"),
+        )
+        .select_from(Measurement)
+        .join(Station, Measurement.station_id == Station.id)
+        .join(City, Station.city_id == City.id)
+        .where(Measurement.pollutant_id == pollutant_id)
+    )
+
+    if city_id:
+        query = query.where(City.id == city_id)
+    if date_from:
+        query = query.where(Measurement.date >= date_from)
+    if date_to:
+        query = query.where(Measurement.date <= date_to)
+
+    result = await session.execute(query)
+    avg, min_val, max_val = result.one()
+
+    return {"avg": avg, "min": min_val, "max": max_val}
