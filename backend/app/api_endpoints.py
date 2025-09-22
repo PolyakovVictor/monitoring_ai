@@ -1,40 +1,35 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from typing import Optional
+from typing import Optional, List
 from datetime import date
 
 from .db import get_session
 from .models import City, Station, Pollutant, Measurement
+from .schemas import CityBase, StationBase, PollutantBase, MeasurementOut, StatsOut
 
 router = APIRouter()
 
-# 1. Міста
-@router.get("/cities/")
+# ---- 1. Міста ----
+@router.get("/cities/", response_model=List[CityBase])
 async def get_cities(session: AsyncSession = Depends(get_session)):
     result = await session.execute(select(City))
-    cities = result.scalars().all()
-    return [{"id": c.id, "name": c.name} for c in cities]
+    return result.scalars().all()
 
-
-# 2. Станції у місті
-@router.get("/cities/{city_id}/stations/")
+# ---- 2. Станції у місті ----
+@router.get("/cities/{city_id}/stations/", response_model=List[StationBase])
 async def get_stations(city_id: int, session: AsyncSession = Depends(get_session)):
     result = await session.execute(select(Station).where(Station.city_id == city_id))
-    stations = result.scalars().all()
-    return [{"id": s.id, "name": s.name} for s in stations]
+    return result.scalars().all()
 
-
-# 3. Полютанти
-@router.get("/pollutants/")
+# ---- 3. Полютанти ----
+@router.get("/pollutants/", response_model=List[PollutantBase])
 async def get_pollutants(session: AsyncSession = Depends(get_session)):
     result = await session.execute(select(Pollutant))
-    pollutants = result.scalars().all()
-    return [{"id": p.id, "code": p.code, "description": p.description} for p in pollutants]
+    return result.scalars().all()
 
-
-# 4. Вимірювання з фільтрами (фіксований join)
-@router.get("/measurements/")
+# ---- 4. Вимірювання з фільтрами ----
+@router.get("/measurements/", response_model=List[MeasurementOut])
 async def get_measurements(
     city_id: Optional[int] = None,
     station_id: Optional[int] = None,
@@ -45,7 +40,6 @@ async def get_measurements(
 ):
     query = (
         select(Measurement, Station, City, Pollutant)
-        .select_from(Measurement)
         .join(Station, Measurement.station_id == Station.id)
         .join(City, Station.city_id == City.id)
         .join(Pollutant, Measurement.pollutant_id == Pollutant.id)
@@ -66,19 +60,18 @@ async def get_measurements(
     rows = result.all()
 
     return [
-        {
-            "city": city.name,
-            "station": station.name,
-            "pollutant": pollutant.code,
-            "date": m.date.isoformat(),
-            "value": m.value,
-        }
+        MeasurementOut(
+            city=city.name,
+            station=station.name,
+            pollutant=pollutant.code,
+            date=m.date,
+            value=m.value
+        )
         for m, station, city, pollutant in rows
     ]
 
-
-# 5. Агреговані статистики (фіксований join)
-@router.get("/stats/")
+# ---- 5. Статистика ----
+@router.get("/stats/", response_model=StatsOut)
 async def get_stats(
     pollutant_id: int,
     city_id: Optional[int] = None,
@@ -92,7 +85,6 @@ async def get_stats(
             func.min(Measurement.value).label("min"),
             func.max(Measurement.value).label("max"),
         )
-        .select_from(Measurement)
         .join(Station, Measurement.station_id == Station.id)
         .join(City, Station.city_id == City.id)
         .where(Measurement.pollutant_id == pollutant_id)
@@ -108,4 +100,4 @@ async def get_stats(
     result = await session.execute(query)
     avg, min_val, max_val = result.one()
 
-    return {"avg": avg, "min": min_val, "max": max_val}
+    return StatsOut(avg=avg, min=min_val, max=max_val)

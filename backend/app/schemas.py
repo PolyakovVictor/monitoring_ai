@@ -1,6 +1,8 @@
 # backend/app/schemas.py
 from pydantic import BaseModel
 from datetime import date
+from typing import Optional, List
+
 
 class MeasurementCreate(BaseModel):
     station_id: int
@@ -8,3 +10,56 @@ class MeasurementCreate(BaseModel):
     date: date
     value: float
 
+
+# ---- City ----
+class CityBase(BaseModel):
+    id: int
+    name: str
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
+    class Config:
+        orm_mode = True
+
+# ---- Station ----
+class StationBase(BaseModel):
+    id: int
+    name: str
+    city_id: int
+
+    class Config:
+        orm_mode = True
+
+# ---- Pollutant ----
+class PollutantBase(BaseModel):
+    id: int
+    code: str
+    description: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+
+# ---- Measurement ----
+class MeasurementBase(BaseModel):
+    id: int
+    station_id: int
+    pollutant_id: int
+    date: date
+    value: float
+
+    class Config:
+        orm_mode = True
+
+# ---- Measurement with joins ----
+class MeasurementOut(BaseModel):
+    city: str
+    station: str
+    pollutant: str
+    date: date
+    value: float
+
+# ---- Stats ----
+class StatsOut(BaseModel):
+    avg: Optional[float]
+    min: Optional[float]
+    max: Optional[float]

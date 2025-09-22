@@ -7,6 +7,8 @@ class City(Base):
     __tablename__ = "cities"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
+    lat = Column(Float)
+    lng = Column(Float)
 
     stations = relationship("Station", back_populates="city")
 
