@@ -8,8 +8,9 @@ import {
     CartesianGrid,
     Tooltip,
     ResponsiveContainer,
+    Legend,
 } from "recharts";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { Gauge, ArrowDown, ArrowUp, Filter, Plus, LogOut, Shield, Trash2 } from "lucide-react";
 import { useAuth } from "../auth-context";
@@ -122,6 +123,35 @@ function SectionTitle({ title, right }: { title: string; right?: React.ReactNode
             {right}
         </div>
     );
+}
+
+// ------------------------------
+// Map Helper
+// ------------------------------
+
+function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }) {
+    const map = useMap();
+    useEffect(() => {
+        map.setView(center, zoom);
+    }, [center, zoom, map]);
+    return null;
+}
+
+// ------------------------------
+// Color Helper
+// ------------------------------
+
+function stringToColor(str: string) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    let color = '#';
+    for (let i = 0; i < 3; i++) {
+        const value = (hash >> (i * 8)) & 0xFF;
+        color += ('00' + value.toString(16)).substr(-2);
+    }
+    return color;
 }
 
 // ------------------------------
@@ -246,15 +276,47 @@ export default function Dashboard() {
 
     // Derived
     const chartData = useMemo(() => {
-        // Group by date (in case multiple stations return same date)
-        const byDate = new Map<string, { date: string; value: number } & Record<string, any>>();
-        for (const m of measurements) {
-            const d = m.date; // already yyyy-mm-dd
-            if (!byDate.has(d)) byDate.set(d, { date: d, value: m.value });
-            else byDate.get(d)!.value = m.value; // simplistic; could average
-        }
+        const byDate = new Map<string, any>();
+
+        // Process actual measurements
+        measurements.forEach((m) => {
+            if (!byDate.has(m.date)) {
+                byDate.set(m.date, { date: m.date });
+            }
+            const entry = byDate.get(m.date);
+            entry[m.pollutant] = m.value;
+        });
+
         return Array.from(byDate.values()).sort((a, b) => (a.date < b.date ? -1 : 1));
     }, [measurements]);
+
+
+
+    // Get all unique pollutant codes from the current data to generate lines
+    const activePollutants = useMemo(() => {
+        const codes = new Set<string>();
+        measurements.forEach(m => codes.add(m.pollutant));
+        forecast.forEach(f => codes.add(f.pollutant));
+        return Array.from(codes);
+    }, [measurements, forecast]);
+
+    const POLLUTANT_COLORS: Record<string, string> = {
+        "pm2.5": "#ef4444", // red
+        "pm10": "#f97316",  // orange
+        "no2": "#eab308",   // yellow
+        "so2": "#84cc16",   // lime
+        "o3": "#06b6d4",    // cyan
+        "co": "#3b82f6",    // blue
+        "pb": "#8b5cf6",    // violet
+    };
+
+    const getColor = (code: string) => {
+        const normalized = code.toLowerCase();
+        if (POLLUTANT_COLORS[normalized]) {
+            return POLLUTANT_COLORS[normalized];
+        }
+        return stringToColor(code);
+    };
 
     const selectedCity = useMemo(() => cities.find((c) => c.id === Number(cityId)), [cities, cityId]);
 
@@ -391,7 +453,7 @@ export default function Dashboard() {
                                 value={pollutantId}
                                 onChange={(e) => setPollutantId(e.target.value ? Number(e.target.value) : "")}
                             >
-                                <option value="">Обрати</option>
+                                <option value="">Всі полютанти</option>
                                 {pollutants.map((p) => (
                                     <option key={p.id} value={p.id}>
                                         {p.code} — {p.description}
@@ -451,8 +513,8 @@ export default function Dashboard() {
                         <Stat
                             icon={<Gauge className="w-6 h-6" />}
                             label="Середнє значення"
-                            value={stats?.avg ? Number(stats.avg.toFixed(3)) : null}
-                            hint={pollutantId ? `для ${pollutants.find(p => p.id === Number(pollutantId))?.code}` : undefined}
+                            value={stats?.avg != null ? Number(stats.avg.toFixed(3)) : null}
+                            hint={pollutantId ? `для ${pollutants.find(p => p.id === Number(pollutantId))?.code}` : "для обраного полютанта"}
                         />
                     </Card>
                     <Card>
@@ -468,23 +530,28 @@ export default function Dashboard() {
                     <SectionTitle title="Динаміка показників" />
                     <div className="h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
+                            <LineChart margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                                <XAxis dataKey="date" allowDuplicatedCategory={false} tick={{ fontSize: 12 }} />
                                 <YAxis tick={{ fontSize: 12 }} />
-                                <Tooltip />
-                                <Line type="monotone" dataKey="value" strokeWidth={2} dot={false} />
-                                {forecast.length > 0 && (
+                                <Tooltip
+                                    contentStyle={{ backgroundColor: darkMode ? '#1f2937' : '#fff', borderColor: darkMode ? '#374151' : '#e5e7eb' }}
+                                    itemStyle={{ color: darkMode ? '#e5e7eb' : '#374151' }}
+                                />
+                                <Legend />
+                                {/* Actual Data Lines */}
+                                {activePollutants.map(code => (
                                     <Line
+                                        key={code}
+                                        data={chartData}
                                         type="monotone"
-                                        dataKey="value"
-                                        data={forecast}
-                                        stroke="orange"
+                                        dataKey={code}
+                                        stroke={getColor(code)}
                                         strokeWidth={2}
                                         dot={false}
-                                        name="Прогноз"
+                                        name={code}
                                     />
-                                )}
+                                ))}
                             </LineChart>
                         </ResponsiveContainer>
                     </div>
@@ -554,6 +621,10 @@ export default function Dashboard() {
                             <TileLayer
                                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                            />
+                            <MapUpdater
+                                center={selectedCity ? [selectedCity.lat, selectedCity.lng] : [49.0, 31.0]}
+                                zoom={selectedCity ? 11 : 6}
                             />
                             {cities.map((c) => (
                                 <Marker key={c.id} position={[c.lat, c.lng]}>

@@ -213,7 +213,7 @@ async def get_stats(
     return StatsOut(avg=avg, min=min_val, max=max_val)
 
 
-@router.get("/forecast/")
+@router.get("/forecast/", response_model=List[MeasurementOut])
 async def forecast(
     city_id: int,
     date_from: date,
