@@ -73,13 +73,19 @@ function buildQuery(params: Record<string, any>): string {
   return s ? `?${s}` : "";
 }
 
+async function fetchForecast(cityId: number, dateFrom: string, dateTo: string) {
+  const params = buildQuery({ city_id: cityId, date_from: dateFrom, date_to: dateTo });
+  const url = `${API_BASE}/forecast/${params}`;
+  return fetchJSON<MeasurementOut[]>(url);
+}
+
 // ------------------------------
 // Small UI helpers
 // ------------------------------
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-5 ${className}`}>{children}</div>
+    <div className={`bg-white dark:bg-darkCard rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 ${className}`}>{children}</div>
   );
 }
 
@@ -96,9 +102,9 @@ function Stat({
 }) {
   return (
     <div className="flex items-center gap-4">
-      <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100">{icon}</div>
+      <div className="p-3 rounded-2xl bg-gray-50 dark:bg-darkBg border border-gray-100 dark:border-gray-700">{icon}</div>
       <div>
-        <div className="text-sm text-gray-500">{label}</div>
+        <div className="text-sm text-gray-500 dark:text-gray-400">{label}</div>
         <div className="text-2xl font-semibold">{value ?? "—"}</div>
         {hint && <div className="text-xs text-gray-400 mt-1">{hint}</div>}
       </div>
@@ -120,6 +126,13 @@ function SectionTitle({ title, right }: { title: string; right?: React.ReactNode
 // ------------------------------
 
 export default function AirQualityMonitoringDashboard() {
+  const [darkMode, setDarkMode] = useState(false);
+
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+    document.documentElement.classList.toggle("dark", !darkMode);
+  };
+
   // Filters
   const [cityId, setCityId] = useState<number | "">("");
   const [stationId, setStationId] = useState<number | "">("");
@@ -133,6 +146,7 @@ export default function AirQualityMonitoringDashboard() {
   const [pollutants, setPollutants] = useState<Pollutant[]>([]);
   const [measurements, setMeasurements] = useState<MeasurementOut[]>([]);
   const [stats, setStats] = useState<StatsOut | null>(null);
+  const [forecast, setForecast] = useState<MeasurementOut[]>([]);
 
   // Loading & error
   const [loading, setLoading] = useState(false);
@@ -205,6 +219,26 @@ export default function AirQualityMonitoringDashboard() {
     run();
   }, [pollutantId, cityId, dateFrom, dateTo]);
 
+  useEffect(() => {
+    if (!cityId || !dateFrom || !dateTo) {
+      setForecast([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    async function run() {
+      try {
+        const data = await fetchForecast(Number(cityId), dateFrom, dateTo);
+        setForecast(data);
+      } catch (e) {
+        console.error("Failed to fetch forecast:", e);
+        setForecast([]);
+      }
+    }
+    run();
+    return () => controller.abort();
+  }, [cityId, dateFrom, dateTo]);
+
   // Derived
   const chartData = useMemo(() => {
     // Group by date (in case multiple stations return same date)
@@ -229,8 +263,8 @@ export default function AirQualityMonitoringDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="sticky top-0 z-20 backdrop-blur bg-white/80 border-b border-gray-100">
+    <div className={`min-h-screen ${darkMode ? "bg-darkBg text-darkText" : "bg-gray-50 text-gray-800"}`}>
+      <header className="sticky top-0 z-20 backdrop-blur bg-white/80 dark:bg-darkCard border-b border-gray-100 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-emerald-600" />
@@ -242,8 +276,14 @@ export default function AirQualityMonitoringDashboard() {
             </div>
           </div>
           <button
+            onClick={toggleDarkMode}
+            className="text-sm px-3 py-2 bg-gray-100 dark:bg-darkCard hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl"
+          >
+            {darkMode ? "Світла тема" : "Темна тема"}
+          </button>
+          <button
             onClick={resetFilters}
-            className="text-sm px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl"
+            className="text-sm px-3 py-2 bg-gray-100 dark:bg-darkCard hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl"
           >
             Скинути фільтри
           </button>
@@ -252,7 +292,7 @@ export default function AirQualityMonitoringDashboard() {
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* Filters */}
-        <Card>
+        <Card className="bg-white dark:bg-darkCard border border-gray-100 dark:border-gray-700">
           <SectionTitle
             title="Фільтри"
             right={<div className="flex items-center gap-2 text-gray-500 text-sm"><Filter className="w-4 h-4"/>Обмежте вибір для точнішого аналізу</div>}
@@ -260,9 +300,9 @@ export default function AirQualityMonitoringDashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
             {/* City */}
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Місто</label>
+              <label className="block text-sm text-gray-500 dark:text-darkText mb-1">Місто</label>
               <select
-                className="w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-emerald-500"
+                className="w-full rounded-xl border-gray-200 dark:border-gray-600 focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-darkCard text-gray-800 dark:text-darkText"
                 value={cityId}
                 onChange={(e) => setCityId(e.target.value ? Number(e.target.value) : "")}
               >
@@ -277,9 +317,9 @@ export default function AirQualityMonitoringDashboard() {
 
             {/* Station */}
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Станція</label>
+              <label className="block text-sm text-gray-500 dark:text-darkText mb-1">Станція</label>
               <select
-                className="w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-emerald-500"
+                className="w-full rounded-xl border-gray-200 dark:border-gray-600 focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-darkCard text-gray-800 dark:text-darkText"
                 value={stationId}
                 onChange={(e) => setStationId(e.target.value ? Number(e.target.value) : "")}
                 disabled={!cityId}
@@ -295,9 +335,9 @@ export default function AirQualityMonitoringDashboard() {
 
             {/* Pollutant */}
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Полютант</label>
+              <label className="block text-sm text-gray-500 dark:text-darkText mb-1">Полютант</label>
               <select
-                className="w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-emerald-500"
+                className="w-full rounded-xl border-gray-200 dark:border-gray-600 focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-darkCard text-gray-800 dark:text-darkText"
                 value={pollutantId}
                 onChange={(e) => setPollutantId(e.target.value ? Number(e.target.value) : "")}
               >
@@ -315,7 +355,7 @@ export default function AirQualityMonitoringDashboard() {
               <label className="block text-sm text-gray-500 mb-1">Від дати</label>
               <input
                 type="date"
-                className="w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-emerald-500"
+                className="w-full rounded-xl border-gray-200 dark:border-gray-600 focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-darkCard text-gray-800 dark:text-darkText"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
               />
@@ -326,7 +366,7 @@ export default function AirQualityMonitoringDashboard() {
               <label className="block text-sm text-gray-500 mb-1">До дати</label>
               <input
                 type="date"
-                className="w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-emerald-500"
+                className="w-full rounded-xl border-gray-200 dark:border-gray-600 focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-darkCard text-gray-800 dark:text-darkText"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
               />
@@ -378,6 +418,17 @@ export default function AirQualityMonitoringDashboard() {
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip />
                 <Line type="monotone" dataKey="value" strokeWidth={2} dot={false} />
+                {forecast.length > 0 && (
+                  <Line
+                    type="monotone"
+                    dataKey="value"
+                    data={forecast}
+                    stroke="orange"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Прогноз"
+                  />
+                )}
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -386,7 +437,7 @@ export default function AirQualityMonitoringDashboard() {
         {/* Table */}
         <Card>
           <SectionTitle title="Таблиця вимірювань" />
-          <div className="overflow-x-auto">
+          <div className="max-h-96 overflow-y-auto overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="text-left text-gray-500">
                 <tr>
@@ -399,7 +450,10 @@ export default function AirQualityMonitoringDashboard() {
               </thead>
               <tbody>
                 {measurements.map((m, i) => (
-                  <tr key={`${m.date}-${i}`} className="border-t border-gray-100">
+                  <tr
+                    key={`${m.date}-${i}`}
+                    className="border-t border-gray-100 dark:border-gray-700"
+                  >
                     <td className="py-2 pr-4 whitespace-nowrap">{m.date}</td>
                     <td className="py-2 pr-4">{m.city}</td>
                     <td className="py-2 pr-4">{m.station}</td>
@@ -407,7 +461,19 @@ export default function AirQualityMonitoringDashboard() {
                     <td className="py-2 pr-4">{m.value}</td>
                   </tr>
                 ))}
-                {!measurements.length && (
+                {forecast.map((f, i) => (
+                  <tr
+                    key={`forecast-${f.date}-${i}`}
+                    className="border-t border-gray-100 dark:border-gray-700 bg-yellow-50"
+                  >
+                    <td className="py-2 pr-4 whitespace-nowrap">{f.date}</td>
+                    <td className="py-2 pr-4">{f.city}</td>
+                    <td className="py-2 pr-4">{f.station}</td>
+                    <td className="py-2 pr-4">{f.pollutant}</td>
+                    <td className="py-2 pr-4">{f.value}</td>
+                  </tr>
+                ))}
+                {!measurements.length && !forecast.length && (
                   <tr>
                     <td colSpan={5} className="py-6 text-center text-gray-500">
                       Немає даних для заданих фільтрів

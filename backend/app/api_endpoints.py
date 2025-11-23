@@ -7,6 +7,7 @@ from datetime import date
 from .db import get_session
 from .models import City, Station, Pollutant, Measurement
 from .schemas import CityBase, StationBase, PollutantBase, MeasurementOut, StatsOut
+from .ai import make_forecast
 
 router = APIRouter()
 
@@ -101,3 +102,14 @@ async def get_stats(
     avg, min_val, max_val = result.one()
 
     return StatsOut(avg=avg, min=min_val, max=max_val)
+
+
+@router.get("/forecast/")
+async def forecast(
+    city_id: int,
+    date_from: date,
+    date_to: date,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await make_forecast(session, city_id, date_from, date_to)
+    return result
