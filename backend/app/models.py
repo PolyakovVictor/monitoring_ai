@@ -12,13 +12,25 @@ class City(Base):
 
     stations = relationship("Station", back_populates="city")
 
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    role = Column(String, default="user") # 'admin' or 'user'
+    is_active = Column(Integer, default=1) # 1=active, 0=inactive (using int for simplicity or boolean if supported by db, assuming sqlite/postgres, int is safe)
+
+    stations = relationship("Station", back_populates="owner")
+
 class Station(Base):
     __tablename__ = "stations"
     id = Column(Integer, primary_key=True, index=True)
     city_id = Column(Integer, ForeignKey("cities.id"))
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     name = Column(String)
 
     city = relationship("City", back_populates="stations")
+    owner = relationship("User", back_populates="stations")
     measurements = relationship("Measurement", back_populates="station")
 
 class Pollutant(Base):

@@ -63,3 +63,38 @@ class StatsOut(BaseModel):
     avg: Optional[float]
     min: Optional[float]
     max: Optional[float]
+
+# ---- Auth & Users ----
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    email: Optional[str] = None
+
+class UserBase(BaseModel):
+    email: str
+
+class UserCreate(UserBase):
+    password: str
+
+class UserRead(UserBase):
+    id: int
+    role: str
+    is_active: int
+
+    class Config:
+        orm_mode = True
+
+class LoginRequest(BaseModel):
+    username: str # OAuth2PasswordRequestForm uses username, but we can support email here too if we want custom login endpoint
+    password: str
+
+# ---- Station Update ----
+class StationCreate(BaseModel):
+    name: str
+    city_id: int
+
+class StationRead(StationBase):
+    owner_id: Optional[int] = None
+

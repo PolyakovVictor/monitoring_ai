@@ -17,6 +17,10 @@ python-multipart = ">=0.0.20,<0.0.21"
 pandas = "^2.3.2"
 numpy = "^2.3.3"
 scikit-learn = "^1.7.2"
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-jose = {extras = ["cryptography"], version = "^3.5.0"}
+greenlet = "^3.2.4"
+bcrypt = "3.2.2"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
