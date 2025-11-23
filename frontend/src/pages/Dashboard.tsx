@@ -288,7 +288,7 @@ export default function Dashboard() {
     return (
         <div className={`min-h-screen ${darkMode ? "bg-darkBg text-darkText" : "bg-gray-50 text-gray-800"}`}>
             <header className="sticky top-0 z-20 backdrop-blur bg-white/80 dark:bg-darkCard border-b border-gray-100 dark:border-gray-700">
-                <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+                <div className="max-w-6xl mx-auto px-8 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-2xl bg-emerald-600" />
                         <div>
@@ -340,7 +340,7 @@ export default function Dashboard() {
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+            <main className="max-w-6xl mx-auto px-8 py-8 space-y-6">
                 {/* Filters */}
                 <Card className="bg-white dark:bg-darkCard border border-gray-100 dark:border-gray-700">
                     <SectionTitle

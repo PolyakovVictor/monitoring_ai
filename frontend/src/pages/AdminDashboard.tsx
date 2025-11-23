@@ -61,7 +61,7 @@ export default function AdminDashboard() {
     if (loading) return <div className="p-8 text-center">Loading...</div>;
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="max-w-6xl mx-auto px-8 py-8">
             <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
                 <Shield className="w-6 h-6 text-emerald-600" /> Admin Dashboard
             </h1>
