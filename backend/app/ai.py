@@ -109,3 +109,101 @@ async def make_forecast(session: AsyncSession, city_id: int, date_from: date, da
             continue
 
     return forecast_results
+
+async def get_current_air_quality_status(session: AsyncSession, city_id: int) -> dict:
+    """
+    Returns a general status dict:
+    {
+        "status": "Good" | "Moderate" | "Unhealthy" | "Hazardous",
+        "color": hex_string,
+        "description": string,
+        "main_pollutant": string
+    }
+    Based on the latest measurements for the city.
+    """
+    # Get latest measurements for each pollutant in this city
+    # We'll just take the last 24h or simply the very last record for each pollutant
+    
+    stmt = (
+        select(Measurement, Pollutant)
+        .join(Pollutant, Measurement.pollutant_id == Pollutant.id)
+        .join(Station, Measurement.station_id == Station.id)
+        .where(Station.city_id == city_id)
+        .order_by(Measurement.date.desc())
+    )
+    
+    # We need to be careful not to fetch millions of rows. 
+    # Ideally we'd use a subquery to get max date per pollutant, but for now let's fetch a reasonable limit 
+    # and filter in python for the "latest" of each type.
+    result = await session.execute(stmt.limit(100)) 
+    rows = result.all() # [(Measurement, Pollutant), ...]
+    
+    if not rows:
+        return {
+            "status": "Unknown",
+            "color": "#9ca3af", # gray
+            "description": "No recent data available",
+            "main_pollutant": "-"
+        }
+
+    # Find latest value for each pollutant
+    latest_values = {} # code -> value
+    
+    for m, p in rows:
+        if p.code not in latest_values:
+            latest_values[p.code] = m.value
+            
+    # Simple heuristic for AQI (simplified US EPA standards)
+    # This is a "Mock AI" logic - in real world this would be a complex calculation or ML model
+    
+    # Define thresholds (very simplified)
+    thresholds = {
+        "pm2.5": [(12, "Good"), (35.4, "Moderate"), (55.4, "Unhealthy"), (150, "Very Unhealthy"), (250, "Hazardous")],
+        "pm10": [(54, "Good"), (154, "Moderate"), (254, "Unhealthy"), (354, "Very Unhealthy"), (424, "Hazardous")],
+        "no2": [(53, "Good"), (100, "Moderate"), (360, "Unhealthy"), (649, "Very Unhealthy"), (1249, "Hazardous")],
+        # defaults for others
+        "default": [(50, "Good"), (100, "Moderate"), (150, "Unhealthy"), (200, "Very Unhealthy"), (300, "Hazardous")]
+    }
+    
+    worst_status_score = 0
+    worst_status_label = "Good"
+    main_pollutant = "-"
+    
+    status_scores = {
+        "Good": 0,
+        "Moderate": 1,
+        "Unhealthy": 2,
+        "Very Unhealthy": 3,
+        "Hazardous": 4
+    }
+    
+    status_colors = {
+        "Good": "#10b981", # emerald-500
+        "Moderate": "#f59e0b", # amber-500
+        "Unhealthy": "#ef4444", # red-500
+        "Very Unhealthy": "#7f1d1d", # red-900
+        "Hazardous": "#581c87", # purple-900
+        "Unknown": "#9ca3af"
+    }
+    
+    for code, val in latest_values.items():
+        th_list = thresholds.get(code.lower(), thresholds["default"])
+        
+        current_label = "Hazardous"
+        for limit, label in th_list:
+            if val <= limit:
+                current_label = label
+                break
+        
+        score = status_scores.get(current_label, 0)
+        if score > worst_status_score:
+            worst_status_score = score
+            worst_status_label = current_label
+            main_pollutant = code
+            
+    return {
+        "status": worst_status_label,
+        "color": status_colors.get(worst_status_label, "#9ca3af"),
+        "description": f"Air quality is {worst_status_label.lower()}.",
+        "main_pollutant": main_pollutant
+    }

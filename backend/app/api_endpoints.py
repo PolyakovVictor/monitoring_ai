@@ -10,7 +10,7 @@ from .schemas import (
     CityBase, StationBase, PollutantBase, MeasurementOut, StatsOut,
     UserCreate, UserRead, Token, LoginRequest, StationCreate, StationRead
 )
-from .ai import make_forecast
+from .ai import make_forecast, get_current_air_quality_status
 from .auth import (
     get_password_hash, verify_password, create_access_token,
     get_current_user, get_current_admin_user, ACCESS_TOKEN_EXPIRE_MINUTES
@@ -222,3 +222,10 @@ async def forecast(
 ):
     result = await make_forecast(session, city_id, date_from, date_to)
     return result
+
+@router.get("/cities/{city_id}/status")
+async def get_city_status(
+    city_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    return await get_current_air_quality_status(session, city_id)

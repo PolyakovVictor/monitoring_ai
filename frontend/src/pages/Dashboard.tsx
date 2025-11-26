@@ -55,6 +55,13 @@ type StatsOut = {
     max: number | null;
 };
 
+type StatusOut = {
+    status: string;
+    color: string;
+    description: string;
+    main_pollutant: string;
+};
+
 // ------------------------------
 // Config
 // ------------------------------
@@ -87,9 +94,9 @@ async function fetchForecast(cityId: number, dateFrom: string, dateTo: string) {
 // Small UI helpers
 // ------------------------------
 
-function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function Card({ children, className = "", ...props }: React.HTMLAttributes<HTMLDivElement>) {
     return (
-        <div className={`bg-white dark:bg-darkCard rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 ${className}`}>{children}</div>
+        <div className={`bg-white dark:bg-darkCard rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 ${className}`} {...props}>{children}</div>
     );
 }
 
@@ -181,6 +188,7 @@ export default function Dashboard() {
     const [pollutants, setPollutants] = useState<Pollutant[]>([]);
     const [measurements, setMeasurements] = useState<MeasurementOut[]>([]);
     const [stats, setStats] = useState<StatsOut | null>(null);
+    const [status, setStatus] = useState<StatusOut | null>(null);
     const [forecast, setForecast] = useState<MeasurementOut[]>([]);
 
     // Loading & error
@@ -199,6 +207,9 @@ export default function Dashboard() {
         setStationId("");
         if (cityId) {
             fetchJSON<Station[]>(`${API_BASE}/cities/${cityId}/stations/`).then(setStations).catch(console.error);
+            fetchJSON<StatusOut>(`${API_BASE}/cities/${cityId}/status`).then(setStatus).catch(() => setStatus(null));
+        } else {
+            setStatus(null);
         }
     }, [cityId]);
 
@@ -287,8 +298,19 @@ export default function Dashboard() {
             entry[m.pollutant] = m.value;
         });
 
+        // Process forecast
+        forecast.forEach((f) => {
+            if (!byDate.has(f.date)) {
+                byDate.set(f.date, { date: f.date, isForecast: true });
+            }
+            const entry = byDate.get(f.date);
+            // We can use the same key to extend the line, or a different key to separate it.
+            // Extending the line is usually better for "prediction" context.
+            entry[f.pollutant] = f.value;
+        });
+
         return Array.from(byDate.values()).sort((a, b) => (a.date < b.date ? -1 : 1));
-    }, [measurements]);
+    }, [measurements, forecast]);
 
 
 
@@ -506,6 +528,36 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </Card>
+
+                {/* Status Card */}
+                {status && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                    >
+                        <Card className="bg-gradient-to-br from-white to-gray-50 dark:from-darkCard dark:to-darkBg border-l-4" style={{ borderLeftColor: status.color }}>
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Загальний стан повітря</h2>
+                                    <div className="mt-2 flex items-baseline gap-3">
+                                        <span className="text-4xl font-bold" style={{ color: status.color }}>
+                                            {status.status}
+                                        </span>
+                                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                                            Головний забруднювач: <span className="font-medium text-gray-700 dark:text-gray-300 uppercase">{status.main_pollutant}</span>
+                                        </span>
+                                    </div>
+                                    <p className="mt-2 text-gray-600 dark:text-gray-400 max-w-2xl">
+                                        {status.description}
+                                    </p>
+                                </div>
+                                <div className="p-4 rounded-full bg-opacity-10" style={{ backgroundColor: `${status.color}20` }}>
+                                    <Shield className="w-8 h-8" style={{ color: status.color }} />
+                                </div>
+                            </div>
+                        </Card>
+                    </motion.div>
+                )}
 
                 {/* Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
