@@ -17,6 +17,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  @apply bg-gray-50 dark:bg-darkBg text-gray-800 dark:text-darkText;
 }
 
 h1 {
@@ -34,6 +35,7 @@ button {
   cursor: pointer;
   transition: border-color 0.25s;
 }
+
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;

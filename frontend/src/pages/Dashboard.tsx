@@ -274,12 +274,27 @@ function stringToColor(str: string) {
 
 export default function Dashboard() {
     const { user, isAuthenticated, logout, isAdmin, token } = useAuth();
-    const [darkMode, setDarkMode] = useState(false);
+    const [darkMode, setDarkMode] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('theme') === 'dark' ||
+                (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        }
+        return false;
+    });
     const [showAddStation, setShowAddStation] = useState(false);
 
+    useEffect(() => {
+        if (darkMode) {
+            document.documentElement.classList.add('dark');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
+        }
+    }, [darkMode]);
+
     const toggleDarkMode = () => {
-        setDarkMode(!darkMode);
-        document.documentElement.classList.toggle("dark", !darkMode);
+        setDarkMode(prev => !prev);
     };
 
     // Filters
@@ -507,7 +522,7 @@ export default function Dashboard() {
     };
 
     return (
-        <div className={`min-h-screen ${darkMode ? "bg-darkBg text-darkText" : "bg-gray-50 text-gray-800"}`}>
+        <div className="min-h-screen bg-gray-50 dark:bg-darkBg text-gray-800 dark:text-darkText">
             <header className="sticky top-0 z-20 backdrop-blur bg-white/80 dark:bg-darkCard border-b border-gray-100 dark:border-gray-700">
                 <div className="max-w-6xl mx-auto px-8 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">

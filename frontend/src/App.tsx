@@ -1,4 +1,4 @@
-// import React from "react";
+import { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./auth-context";
 import Dashboard from "./pages/Dashboard";
@@ -8,6 +8,16 @@ import AdminDashboard from "./pages/AdminDashboard";
 import "./App.css";
 
 function App() {
+  // Initialize theme globally
+  useEffect(() => {
+    if (localStorage.getItem('theme') === 'dark' ||
+      (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
   return (
     <AuthProvider>
       <Router>
