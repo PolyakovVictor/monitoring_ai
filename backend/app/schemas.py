@@ -98,3 +98,17 @@ class StationCreate(BaseModel):
 class StationRead(StationBase):
     owner_id: Optional[int] = None
 
+# ---- Report ----
+class PollutantStats(BaseModel):
+    pollutant: str
+    avg: Optional[float]
+    min: Optional[float]
+    max: Optional[float]
+
+class ReportOut(BaseModel):
+    city: str
+    date: date
+    status: dict # Reusing the status dict structure
+    stats: List[PollutantStats]
+
+

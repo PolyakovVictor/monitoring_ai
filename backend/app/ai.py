@@ -12,6 +12,7 @@ from .schemas import MeasurementOut
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 ENCODER_PATH = os.path.join(BASE_DIR, "label_encoder.pkl")
+QUALITY_MODEL_PATH = os.path.join(BASE_DIR, "quality_models.pkl")
 
 # Load model and encoder
 try:
@@ -23,6 +24,13 @@ except FileNotFoundError:
     model = None
     label_encoder = None
     print("⚠️ Model or Label Encoder not found. Forecasting will not work.")
+
+try:
+    with open(QUALITY_MODEL_PATH, "rb") as f:
+        quality_models = pickle.load(f)
+except FileNotFoundError:
+    quality_models = None
+    print("⚠️ Quality Models not found. Falling back to simple heuristics if needed (or failing).")
 
 async def make_forecast(session: AsyncSession, city_id: int, date_from: date, date_to: date):
     if not model or not label_encoder:
@@ -153,29 +161,15 @@ async def get_current_air_quality_status(session: AsyncSession, city_id: int) ->
         if p.code not in latest_values:
             latest_values[p.code] = m.value
             
-    # Simple heuristic for AQI (simplified US EPA standards)
-    # This is a "Mock AI" logic - in real world this would be a complex calculation or ML model
-    
-    # Define thresholds (very simplified)
-    thresholds = {
-        "pm2.5": [(12, "Good"), (35.4, "Moderate"), (55.4, "Unhealthy"), (150, "Very Unhealthy"), (250, "Hazardous")],
-        "pm10": [(54, "Good"), (154, "Moderate"), (254, "Unhealthy"), (354, "Very Unhealthy"), (424, "Hazardous")],
-        "no2": [(53, "Good"), (100, "Moderate"), (360, "Unhealthy"), (649, "Very Unhealthy"), (1249, "Hazardous")],
-        # defaults for others
-        "default": [(50, "Good"), (100, "Moderate"), (150, "Unhealthy"), (200, "Very Unhealthy"), (300, "Hazardous")]
-    }
+    # ML-Based Classification (K-Means)
+    # We use the trained centroids to determine which cluster the value belongs to.
+    # Clusters are sorted: 0=Good, ..., 4=Hazardous
     
     worst_status_score = 0
     worst_status_label = "Good"
     main_pollutant = "-"
     
-    status_scores = {
-        "Good": 0,
-        "Moderate": 1,
-        "Unhealthy": 2,
-        "Very Unhealthy": 3,
-        "Hazardous": 4
-    }
+    status_labels = ["Good", "Moderate", "Unhealthy", "Very Unhealthy", "Hazardous"]
     
     status_colors = {
         "Good": "#10b981", # emerald-500
@@ -187,23 +181,39 @@ async def get_current_air_quality_status(session: AsyncSession, city_id: int) ->
     }
     
     for code, val in latest_values.items():
-        th_list = thresholds.get(code.lower(), thresholds["default"])
+        # Default to Good if no model found
+        score = 0
         
-        current_label = "Hazardous"
-        for limit, label in th_list:
-            if val <= limit:
-                current_label = label
-                break
-        
-        score = status_scores.get(current_label, 0)
+        if quality_models and code in quality_models:
+            qm = quality_models[code]
+            # qm has "centroids" sorted.
+            # We find the closest centroid.
+            # Or better: since they are 1D and sorted, we can just find the nearest index.
+            
+            centroids = qm["centroids"]
+            # Calculate distance to each centroid
+            distances = np.abs(centroids - val)
+            closest_cluster_idx = np.argmin(distances)
+            
+            # The index in 'centroids' corresponds to the rank (0..4)
+            score = closest_cluster_idx
+            
+            # Safety cap if k < 5
+            if score >= len(status_labels):
+                score = len(status_labels) - 1
+        else:
+            # Fallback if model missing for this pollutant? 
+            # Maybe just skip or assume Good.
+            pass
+            
         if score > worst_status_score:
             worst_status_score = score
-            worst_status_label = current_label
+            worst_status_label = status_labels[score]
             main_pollutant = code
             
     return {
         "status": worst_status_label,
         "color": status_colors.get(worst_status_label, "#9ca3af"),
-        "description": f"Air quality is {worst_status_label.lower()}.",
+        "description": f"Air quality is {worst_status_label.lower()} (determined by AI analysis of {main_pollutant}).",
         "main_pollutant": main_pollutant
     }

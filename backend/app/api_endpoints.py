@@ -146,6 +146,8 @@ async def get_measurements(
     pollutant_id: Optional[int] = None,
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
+    limit: int = 500,
+    offset: int = 0,
     session: AsyncSession = Depends(get_session),
 ):
     query = (
@@ -165,6 +167,12 @@ async def get_measurements(
         query = query.where(Measurement.date >= date_from)
     if date_to:
         query = query.where(Measurement.date <= date_to)
+
+    # Sort by date descending (latest first)
+    query = query.order_by(Measurement.date.desc())
+    
+    # Apply limit and offset
+    query = query.offset(offset).limit(limit)
 
     result = await session.execute(query)
     rows = result.all()
@@ -223,9 +231,65 @@ async def forecast(
     result = await make_forecast(session, city_id, date_from, date_to)
     return result
 
-@router.get("/cities/{city_id}/status")
-async def get_city_status(
+    return await get_current_air_quality_status(session, city_id)
+
+@router.get("/cities/{city_id}/report")
+async def get_city_report(
     city_id: int,
     session: AsyncSession = Depends(get_session),
 ):
-    return await get_current_air_quality_status(session, city_id)
+    # 1. Get City
+    city_res = await session.execute(select(City).where(City.id == city_id))
+    city = city_res.scalars().first()
+    if not city:
+        raise HTTPException(status_code=404, detail="City not found")
+
+    # 2. Get Status
+    status = await get_current_air_quality_status(session, city_id)
+
+    # 3. Get Stats for all pollutants (last 30 days for example)
+    # We want to show a summary of recent air quality
+    date_from = date.today() - timedelta(days=30)
+    
+    # Get all pollutants in this city
+    stmt_pollutants = (
+        select(Pollutant)
+        .join(Measurement, Measurement.pollutant_id == Pollutant.id)
+        .join(Station, Measurement.station_id == Station.id)
+        .where(Station.city_id == city_id)
+        .distinct()
+    )
+    pollutants_res = await session.execute(stmt_pollutants)
+    pollutants = pollutants_res.scalars().all()
+
+    stats_list = []
+    for p in pollutants:
+        # Calculate stats
+        query = (
+            select(
+                func.avg(Measurement.value).label("avg"),
+                func.min(Measurement.value).label("min"),
+                func.max(Measurement.value).label("max"),
+            )
+            .join(Station, Measurement.station_id == Station.id)
+            .where(Station.city_id == city_id)
+            .where(Measurement.pollutant_id == p.id)
+            .where(Measurement.date >= date_from)
+        )
+        res = await session.execute(query)
+        avg, min_val, max_val = res.one()
+        
+        if avg is not None:
+            stats_list.append({
+                "pollutant": p.code,
+                "avg": round(avg, 2),
+                "min": min_val,
+                "max": max_val
+            })
+
+    return {
+        "city": city.name,
+        "date": date.today(),
+        "status": status,
+        "stats": stats_list
+    }
