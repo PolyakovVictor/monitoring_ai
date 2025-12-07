@@ -178,7 +178,7 @@ function ReportModal({ cityId, onClose }: { cityId: number; onClose: () => void 
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-white dark:bg-darkCard w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden print:shadow-none print:w-full print:max-w-none"
+                className="bg-white dark:bg-darkCard w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-xl print:shadow-none print:w-full print:max-w-none print:max-h-none print:overflow-visible"
             >
                 <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center print:hidden">
                     <h2 className="text-xl font-bold">Звіт про якість повітря</h2>
